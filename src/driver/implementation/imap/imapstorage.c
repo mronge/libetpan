@@ -351,6 +351,16 @@ static void imap_mailstorage_uninitialize(struct mailstorage * storage)
   storage->sto_data = NULL;
 }
 
+static inline struct imap_session_state_data * get_data(mailsession * session)
+{
+  return session->sess_data;
+}
+
+static mailimap * get_imap_session(mailsession * session)
+{
+  return get_data(session)->imap_session;
+}
+
 static int imap_connect(struct mailstorage * storage,
     mailsession ** result)
 {
@@ -387,16 +397,29 @@ static int imap_connect(struct mailstorage * storage,
     res = r;
     goto err;
   }
+  
+  switch (imap_storage->imap_auth_type) {
+    case IMAP_AUTH_TYPE_XOAUTH2: {
+      mailimap *imap = get_imap_session(session);
+      r = mailimap_oauth2_authenticate(imap, imap_storage->imap_sasl.sasl_auth_name,
+                                             imap_storage->imap_sasl.sasl_password);
+      break;
+    }
+      
+    default: {
+      r = mailstorage_generic_auth_sasl(session, r,
+                                        imap_storage->imap_sasl.sasl_auth_type,
+                                        imap_storage->imap_sasl.sasl_server_fqdn,
+                                        imap_storage->imap_sasl.sasl_local_ip_port,
+                                        imap_storage->imap_sasl.sasl_remote_ip_port,
+                                        imap_storage->imap_sasl.sasl_login,
+                                        imap_storage->imap_sasl.sasl_auth_name,
+                                        imap_storage->imap_sasl.sasl_password,
+                                        imap_storage->imap_sasl.sasl_realm);
+      break;
+    }
+  }
 
-  r = mailstorage_generic_auth_sasl(session, r,
-      imap_storage->imap_sasl.sasl_auth_type,
-      imap_storage->imap_sasl.sasl_server_fqdn,
-      imap_storage->imap_sasl.sasl_local_ip_port,
-      imap_storage->imap_sasl.sasl_remote_ip_port,
-      imap_storage->imap_sasl.sasl_login,
-      imap_storage->imap_sasl.sasl_auth_name,
-      imap_storage->imap_sasl.sasl_password,
-      imap_storage->imap_sasl.sasl_realm);
   if (r != MAIL_NO_ERROR) {
     res = r;
     goto free;
